@@ -58,22 +58,36 @@ globalArr_from_Clipboard() {
         if (A_LastError) {
             continue
         }
+        Size:=-1 ;-1 for "handle"
+        HGLOBAL:=dataPtr
         if (dataPtr==0) {
-            Size:=0
+            handle_type:="delayed rendering"
+            Size:=-2 ;-2 for "delayed rendering"
             HGLOBAL:=0
         } else {
+            switch Format_Name {
+                case "CF_BITMAP":
+                    handle_type:="HBITMAP"
+                case "CF_ENHMETAFILE":
+                    handle_type:="HENHMETAFILE"
+                case "CF_PALETTE":
+                    handle_type:="HPALETTE"
+                default:
+                    handle_type:="memory"
 
-            Size:=DllCall("GlobalSize","Ptr",dataPtr,"Ptr")
+                    src:=DllCall("GlobalLock","Ptr",dataPtr,"Ptr")
 
-            HGLOBAL:=DllCall("GlobalAlloc","Uint",0x0002,"Ptr",Size)
-            Data:=DllCall("GlobalLock","Ptr",HGLOBAL)
-            src:=DllCall("GlobalLock","Ptr",dataPtr)
-            DllCall("ntdll\memcpy","Ptr",Data,"Ptr",src,"Ptr",Size)
-            DllCall("GlobalUnlock","Ptr",dataPtr) ;always fails(return value of 1)
-            DllCall("GlobalUnlock","Ptr",HGLOBAL)
+                    Size:=DllCall("GlobalSize","Ptr",dataPtr,"Ptr")
+                    HGLOBAL:=DllCall("GlobalAlloc","Uint",0x0002,"Ptr",Size,"Ptr")
+                    Data:=DllCall("GlobalLock","Ptr",HGLOBAL,"Ptr")
+                    DllCall("ntdll\memcpy","Ptr",Data,"Ptr",src,"Ptr",Size)
+                    DllCall("GlobalUnlock","Ptr",dataPtr) ;always fails(return value of 1)
+                    DllCall("GlobalUnlock","Ptr",HGLOBAL)
+            }
+
         }
 
-        globalArr.Push({Format_ID:clip_format,Format_Name:Format_Name,Size:Size,Index:Index,HGLOBAL:HGLOBAL})
+        globalArr.Push({Format_ID:clip_format,Format_Name:Format_Name,Size:Size,Index:Index,HGLOBAL:HGLOBAL,handle_type:handle_type})
         ++Index
     }
     DllCall("CloseClipboard")
@@ -116,7 +130,7 @@ deleteClicked(GuiCtrlObj, Info) {
     for obj in globalArr {
 
         OLD_HGLOBAL:=obj.HGLOBAL
-        if (OLD_HGLOBAL!==0) {
+        if (obj.handle_type == "memory") {
             ;attempts to prevent ahk Error:  GlobalLock
             HGLOBAL:=DllCall("GlobalAlloc","Uint",0x0002,"Ptr",obj.Size)
             Data:=DllCall("GlobalLock","Ptr",HGLOBAL)
